@@ -1,11 +1,12 @@
 import os
 from config import POSTGRES_URL, EMBEDDING_PROVIDER, OPENAI_API_KEY
-
+from postgresql import get_pg_engine
 import paramiko
 from langchain_ollama import OllamaEmbeddings
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.document_loaders import UnstructuredWordDocumentLoader
-from langchain_community.document_loaders import Docx2txtLoader
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
@@ -17,16 +18,13 @@ import pytz
 tz = pytz.timezone("Asia/Taipei")
 
 
-'''
+
 # SSH 連線資訊（請填入你的遠端伺服器資訊）
 SSH_HOST = "10.96.196.74"
 SSH_PORT = 22  # 預設為 22
 SSH_USER = "biguser"
 SSH_PASSWORD = "npspo"  # 建議使用 SSH 金鑰驗證，避免明文密碼
 BASE_PATH = "/mnt/nfs_share/pydio/jacky/05_Technical_Knowledge/00_Internal_Training/03_WiFi_Professsional"
-
-# 連接 PostgreSQL
-engine = get_pg_engine()
 
 
 def ssh_connect():
@@ -89,7 +87,7 @@ def download_file_via_ssh(remote_path):
     except Exception as e:
         print(f"下載失敗 {remote_path}: {e}")
         return None
-'''
+
 def get_embedding_model(provider):
     """
     根據 provider 參數選擇要使用的 embedding 模型。
@@ -105,7 +103,11 @@ def get_embedding_model(provider):
 
 def get_loader(local_file_path, file_ext:str):
     if file_ext.lower() in ('.doc','.docx'):
-        return Docx2txtLoader(local_file_path)
+        return UnstructuredWordDocumentLoader(local_file_path)
+    if file_ext.lower() == '.pdf':
+        return PyPDFLoader(local_file_path)
+    if file_ext.lower() == '.txt':
+        return TextLoader(local_file_path, encoding='utf-8')
     elif file_ext == '.txt':
         return None
 
@@ -143,42 +145,24 @@ def filter_chunks(chunks, percentile_threshold=30):
     return df
 
 
-def get_vector_store(embedding_model, which_db:str):
-    if which_db.lower() == 'postgresql':
-        return PGVector(
-                collection_name="example_collection",
-                embedding_function=embedding_model,
-                persist_directory="./postgresql_langchain_db",  # Where to save data locally, remove if not necessary
-            )
-    if which_db.lower() == 'chroma':
-        return Chroma(
-                collection_name="example_collection",
-                embedding_function=embedding_model,
-                persist_directory="./chroma_langchain_db",  # Where to save data locally, remove if not necessary
-            )
-    else:
-        return InMemoryVectorStore(embedding_model)
-
-
-
-# print(f'共有 {len(get_all_files())}個檔案')
-# files = get_all_files()[0:1]
 
 data = []
-files = [{
-    'document_name':'testing_file.docx',
-    'file_path':'./downloads/testing_file.docx',
-    'file_ext':'.docx'
-}]
+files = get_all_files()
+print(f'共有 {len(get_all_files())}個檔案')
+# files = [{
+#     'document_name':'testing_file.docx',
+#     'file_path':'./downloads/testing_file.docx',
+#     'file_ext':'.docx'
+# }]
 for file in files:
     current_time = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
     document_name = file['document_name']
     file_path = file['file_path']
     file_ext = file['file_ext']
 
-    # download_file_via_ssh(file['file_path'])
+    download_file_via_ssh(file['file_path'])
 
-    loader = get_loader(file_path, file_ext)
+    loader = get_loader(f'./downloads/{document_name}', file_ext)
 
     document_text = loader.load()
     document_text_page_content = document_text[0].page_content
@@ -209,57 +193,43 @@ for file in files:
     embedding_model = get_embedding_model(EMBEDDING_PROVIDER)
 
     vectors = embedding_model.embed_documents(splitted_chunks)
-
-
     # print(len(vectors))
     # vector_store = get_vector_store(embedding_model, which_db='chroma')
-
-
     
     for idx, (chunk, vector) in enumerate(zip(splitted_chunks, vectors), start=1):
-        data.append([idx, document_name, chunk, '', vector, current_time, file_path, file])
+        data.append([document_name, idx, chunk, '', vector, current_time, file_path, file])
         # print(idx, document_name, chunk, '', vector, current_time, file_path, file)
         # print('-------------------------------------------')
 
 
+import json
+import sqlalchemy
+df = pd.DataFrame(data, columns=['document_name', 'chunk_id', 'original_text', 'cleaned_text', 'embedding', 'process_datetime', 'file_path', 'metadata'])
+df['cleaned_text'] = df['original_text'].apply(lambda x: x.replace("\n", " ").replace("\r", " ") if isinstance(x, str) else x)
+df['metadata'] = df['metadata'].apply(lambda x: json.dumps(x) if isinstance(x, dict) else x)
 
-df = pd.DataFrame(data, columns=['id', 'document_name', 'original_text', 'cleaned_text', 'embedding', 'process_datetime', 'file_path', 'metadata'])
 
 # from IPython.display import display
-# display(df)
+print(df.shape)
+pg_engine = get_pg_engine()
+dtype_schema = {
+    'document_name': sqlalchemy.types.Unicode,
+    'chunk_id': sqlalchemy.types.String,
+    'original_text': sqlalchemy.types.Unicode,
+    'cleaned_text': sqlalchemy.types.Unicode,
+    'embedding': sqlalchemy.types.ARRAY(sqlalchemy.types.Float),
+    'process_datetime': sqlalchemy.types.DateTime,
+    'file_path': sqlalchemy.types.String,
+    'metadata': sqlalchemy.types.Unicode
+} 
+df.to_sql("wifi_knowledge_embedding_bge", pg_engine, if_exists="replace", index=False)
+
+print("數據插入或更新完成！")
 
 
 
 
-from sqlalchemy import create_engine
-import chromadb
-
-# 1. 啟動 ChromaDB（持久化模式）
-chroma_client = chromadb.PersistentClient(path="./chroma_langchain_db")
-
-# 2. 創建或獲取 Collection
-collection = chroma_client.get_or_create_collection(name="example_collection")
-
-# 3. 批量插入 DataFrame（Bulk Insert）
-collection.add(
-    ids=df["id"].astype(str).tolist(),  # ChromaDB 的 ID 需要是字串
-    documents=df["original_text"].astype(str).tolist(),  # 原始文本
-    metadatas=df.apply(lambda row: {  # Metadata 是 JSON 格式
-        "document_name": row["document_name"],
-        "file_path": row["file_path"],
-        "file_ext": row["metadata"]['file_ext'],
-        "cleaned_text": row["cleaned_text"],
-        "process_datetime": str(row["process_datetime"])  # 確保是字串
-    }, axis=1).tolist(),
-    embeddings=df["embedding"].tolist()  # 向量嵌入，必須是 List[List[float]]
-)
-
-
-
-
-
-
-
+'''
 import chromadb
 from sentence_transformers import SentenceTransformer
 import openai  # 如果你要使用 OpenAI API
@@ -302,3 +272,6 @@ def query_rag(user_input):
 user_question = input("請輸入你的問題：")
 answer = query_rag(user_question)
 print("\n💡 AI 回答：\n", answer)
+
+
+'''

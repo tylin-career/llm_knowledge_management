@@ -27,13 +27,15 @@ def create_table():
             text("""
                 CREATE TABLE IF NOT EXISTS wifi_knowledge_embedding_openai (
                     id SERIAL PRIMARY KEY,
-                    document_name TEXT COLLATE pg_catalog."default",
+                    document_name TEXT COLLATE pg_catalog."default" NOT NULL,
+                    chunk_id INT NOT NULL,
                     original_text TEXT COLLATE pg_catalog."default",
                     cleaned_text TEXT COLLATE pg_catalog."default",
                     embedding VECTOR(1536), 
                     process_datetime TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     file_path TEXT COLLATE pg_catalog."default",
-                    metadata JSONB
+                    metadata JSONB,
+                    UNIQUE (document_name, chunk_id)
                 );
             """)
         )
@@ -41,20 +43,21 @@ def create_table():
             text("""
                 CREATE TABLE IF NOT EXISTS wifi_knowledge_embedding_bge (
                     id SERIAL PRIMARY KEY,
-                    document_name TEXT COLLATE pg_catalog."default",
+                    document_name TEXT COLLATE pg_catalog."default" NOT NULL,
+                    chunk_id INT NOT NULL,
                     original_text TEXT COLLATE pg_catalog."default",
                     cleaned_text TEXT COLLATE pg_catalog."default",
                     embedding VECTOR(1024), 
                     process_datetime TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     file_path TEXT COLLATE pg_catalog."default",
-                    metadata JSONB
+                    metadata JSONB,
+                    UNIQUE (document_name, chunk_id)
                 );
             """)
         )
-        connection.commit()  # 🚀 新增這一行來確保變更生效
+        connection.commit()
         print("✅ 建立表格 wifi_knowledge_embedding_openai 成功")
         print("✅ 建立表格 wifi_knowledge_embedding_bge 成功")
 
 
-
-create_table()
+# create_table()
