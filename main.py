@@ -42,7 +42,7 @@ def get_embedding_model(provider):
         return OllamaEmbeddings(model=ollama_embedding_model, base_url="http://10.96.196.63:11434")  # 你可以換成你在 Ollama 內部訓練的 embedding 模型
     
 
-def retrieve_similar_chunks(query, vector_table, top_k=5) -> tuple:
+def retrieve_similar_chunks(query, vector_table, top_k=5) -> list:
     try:
         conn = psycopg2.connect(
             host='10.96.196.63',
@@ -60,8 +60,7 @@ def retrieve_similar_chunks(query, vector_table, top_k=5) -> tuple:
                 document_name,
                 original_text,
                 embedding <=> CAST(%s AS vector) AS cosine_distance,
-                file_path,
-                metadata
+                file_path
             FROM {vector_table}
             ORDER BY cosine_distance ASC
             LIMIT %s;
@@ -77,39 +76,95 @@ def retrieve_similar_chunks(query, vector_table, top_k=5) -> tuple:
         return results
 
     except Exception as e:
-        return ()  # 確保即使出錯也返回空列表，避免後端崩潰
+        return []  # 確保即使出錯也返回空列表，避免後端崩潰
     finally:
         if conn:
             conn.close()
 
-
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.memory import ConversationBufferMemory
+from langchain_core.output_parsers import StrOutputParser
 
 def main():
     query = '請問甚麼是802.11ax'
-    results = retrieve_similar_chunks(query, "wifi_knowledge_embedding_bge", top_k=5)
+    retrieved_data = retrieve_similar_chunks(query, "wifi_knowledge_embedding_bge", top_k=5)
+
+    # Get retrieved context and its similiarity
+    context_list = list(zip([context[1] for context in retrieved_data], [context[2] for context in retrieved_data]))
+    # Get file_name and its remote path
+    file_info_list = list(zip([document[0] for document in retrieved_data], [document[3] for document in retrieved_data]))
+
+    context_chunks = [thing[0] for thing in context_list]
+    formatted_context = "\n\n".join(context_chunks)
 
 
-    for result in results:
-        print(result)
-        print('--------------------------------------')
+
+    prompt = ChatPromptTemplate([
+        ("system", """
+        你是一位在 WiFi 6、WiFi 7 與 802.11 協議的專家，請根據參考資訊回答問題：
+        
+        參考資訊：
+        {context}
+
+        注意：
+        1. 你只能依據提供的資訊回答，請勿編造內容。
+        2. 若無足夠資訊，請回答「根據目前資訊無法回答」。
+        3. 請以專業、精確的方式回答問題。
+        """),
+        MessagesPlaceholder("conversation")  # 用來放對話歷史
+    ])
 
 
+    llm = get_llm()
 
-main()
+    # **3. 啟用對話記憶**
+    memory = ConversationBufferMemory(memory_key="conversation", return_messages=True)
+
+    # **6. 建立串流 chain**
+    chain = prompt | llm | StrOutputParser()
+
+    # **7. 問答迴圈**
+    while True:
+        user_input = input("請輸入你的問題（輸入 'exit' 離開）：")
+        if user_input.lower() == "exit":
+            break
+        
+        # **更新記憶**
+        memory.chat_memory.add_user_message(user_input)
+
+        # **開始 Streaming 回應**
+        print("\nAI 回答：", end="", flush=True)
+        response_stream = llm.stream({
+            "context": formatted_context,
+            "question": user_input,
+            "conversation": memory.load_memory_variables({})["conversation"]
+        })
+
+        full_response = ""
+        for chunk in response_stream:
+            print(chunk.content, end="", flush=True)  # ✅ **即時顯示逐字回應**
+            full_response += chunk.content
+
+        print("\n")  # 換行
+
+        # **儲存 AI 回應**
+        memory.chat_memory.add_ai_message(full_response)
+
+if __name__ == "__main__":
+    main()
 
 
+# messages = [
+#     (
+#         "system",
+#         "You are a helpful assistant that translates English to 繁體中文. Translate the user sentence.",
+#     ),
+#     ("user", user_inputs),
+#     ("assistant", "翻譯成繁體中文"),
+# ]
 
-messages = [
-    (
-        "system",
-        "You are a helpful assistant that translates English to 繁體中文. Translate the user sentence.",
-    ),
-    ("human", user_inputs),
-    ("assistant", "翻譯成繁體中文"),
-]
 
-
-# 呼叫模型並逐步輸出
-llm = get_llm()
-for chunk in llm.stream(messages):
-    print(chunk.content, end="", flush=True)  # 逐字輸出
+# # 呼叫模型並逐步輸出
+# llm = get_llm()
+# for chunk in llm.stream(messages):
+#     print(chunk.content, end="", flush=True)  # 逐字輸出
