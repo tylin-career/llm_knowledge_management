@@ -115,3 +115,53 @@ if st.button("🔍 查詢"):
                 response_area.markdown(response_text)
     else:
         st.warning("⚠️ 請輸入問題後再查詢。")
+
+
+
+
+'''
+import chromadb
+from sentence_transformers import SentenceTransformer
+import openai  # 如果你要使用 OpenAI API
+import ollama  # 如果你要用本機 Ollama（支援 LLaMA 3.1）
+
+# 1️⃣ 初始化 ChromaDB 客戶端
+chroma_client = chromadb.PersistentClient(path="./chroma_langchain_db")
+collection = chroma_client.get_or_create_collection(name="documents")
+
+# 2️⃣ 初始化向量模型（使用 `sentence-transformers`）
+embedding_model = SentenceTransformer("all-MiniLM-L6-v2")  # 輕量級但準確
+
+# 3️⃣ 定義 RAG 查詢函式
+def query_rag(user_input):
+    # 👉 取得使用者輸入的 embedding
+    query_embedding = embedding_model.encode(user_input).tolist()
+
+    # 👉 用向量搜尋 ChromaDB（取最相關的 3 筆資料）
+    search_results = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=3
+    )
+
+    # 👉 組合檢索到的內容
+    retrieved_texts = [doc[0] if isinstance(doc, list) else doc for doc in search_results["documents"]]
+    context = "\n".join(retrieved_texts)
+
+    # 🔹 使用 OpenAI API（如果你有 API Key）
+    response = openai.ChatCompletion.create(
+        model="gpt-4",  # 或 "gpt-3.5-turbo"
+        messages=[
+            {"role": "system", "content": "你是一個知識庫助手，請使用提供的文件來回答問題。"},
+            {"role": "user", "content": f"文件內容：\n{context}\n\n使用者問題：{user_input}"}
+        ]
+    )
+
+    return response["choices"][0]["message"]["content"]
+
+# 4️⃣ 測試 RAG 查詢
+user_question = input("請輸入你的問題：")
+answer = query_rag(user_question)
+print("\n💡 AI 回答：\n", answer)
+
+
+'''

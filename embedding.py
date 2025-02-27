@@ -147,7 +147,7 @@ def filter_chunks(chunks, percentile_threshold=30):
 
 
 data = []
-files = get_all_files()
+files = get_all_files() #[0:1]
 print(f'共有 {len(get_all_files())}個檔案')
 # files = [{
 #     'document_name':'testing_file.docx',
@@ -193,17 +193,16 @@ for file in files:
     embedding_model = get_embedding_model(EMBEDDING_PROVIDER)
 
     vectors = embedding_model.embed_documents(splitted_chunks)
-    # print(len(vectors))
-    # vector_store = get_vector_store(embedding_model, which_db='chroma')
     
     for idx, (chunk, vector) in enumerate(zip(splitted_chunks, vectors), start=1):
         data.append([document_name, idx, chunk, '', vector, current_time, file_path, file])
-        # print(idx, document_name, chunk, '', vector, current_time, file_path, file)
-        # print('-------------------------------------------')
 
 
 import json
 import sqlalchemy
+from pgvector.sqlalchemy import Vector
+from sqlalchemy.dialects.postgresql import JSONB
+
 df = pd.DataFrame(data, columns=['document_name', 'chunk_id', 'original_text', 'cleaned_text', 'embedding', 'process_datetime', 'file_path', 'metadata'])
 df['cleaned_text'] = df['original_text'].apply(lambda x: x.replace("\n", " ").replace("\r", " ") if isinstance(x, str) else x)
 df['metadata'] = df['metadata'].apply(lambda x: json.dumps(x) if isinstance(x, dict) else x)
@@ -217,61 +216,11 @@ dtype_schema = {
     'chunk_id': sqlalchemy.types.String,
     'original_text': sqlalchemy.types.Unicode,
     'cleaned_text': sqlalchemy.types.Unicode,
-    'embedding': sqlalchemy.types.ARRAY(sqlalchemy.types.Float),
+    'embedding': Vector(1024),
     'process_datetime': sqlalchemy.types.DateTime,
     'file_path': sqlalchemy.types.String,
-    'metadata': sqlalchemy.types.Unicode
-} 
-df.to_sql("wifi_knowledge_embedding_bge", pg_engine, if_exists="replace", index=False)
+    'metadata': JSONB
+}
+df.to_sql("wifi_knowledge_embedding_bge", pg_engine, dtype=dtype_schema, if_exists="replace", index=False)
 
 print("數據插入或更新完成！")
-
-
-
-
-'''
-import chromadb
-from sentence_transformers import SentenceTransformer
-import openai  # 如果你要使用 OpenAI API
-import ollama  # 如果你要用本機 Ollama（支援 LLaMA 3.1）
-
-# 1️⃣ 初始化 ChromaDB 客戶端
-chroma_client = chromadb.PersistentClient(path="./chroma_langchain_db")
-collection = chroma_client.get_or_create_collection(name="documents")
-
-# 2️⃣ 初始化向量模型（使用 `sentence-transformers`）
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")  # 輕量級但準確
-
-# 3️⃣ 定義 RAG 查詢函式
-def query_rag(user_input):
-    # 👉 取得使用者輸入的 embedding
-    query_embedding = embedding_model.encode(user_input).tolist()
-
-    # 👉 用向量搜尋 ChromaDB（取最相關的 3 筆資料）
-    search_results = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=3
-    )
-
-    # 👉 組合檢索到的內容
-    retrieved_texts = [doc[0] if isinstance(doc, list) else doc for doc in search_results["documents"]]
-    context = "\n".join(retrieved_texts)
-
-    # 🔹 使用 OpenAI API（如果你有 API Key）
-    response = openai.ChatCompletion.create(
-        model="gpt-4",  # 或 "gpt-3.5-turbo"
-        messages=[
-            {"role": "system", "content": "你是一個知識庫助手，請使用提供的文件來回答問題。"},
-            {"role": "user", "content": f"文件內容：\n{context}\n\n使用者問題：{user_input}"}
-        ]
-    )
-
-    return response["choices"][0]["message"]["content"]
-
-# 4️⃣ 測試 RAG 查詢
-user_question = input("請輸入你的問題：")
-answer = query_rag(user_question)
-print("\n💡 AI 回答：\n", answer)
-
-
-'''
