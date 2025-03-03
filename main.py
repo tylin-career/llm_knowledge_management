@@ -1,10 +1,13 @@
 from langchain_openai import ChatOpenAI
 from langchain_ollama import OllamaEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from config import LLM_PROVIDER, OPENAI_API_KEY
 from postgresql import get_pg_engine
-from sqlalchemy import text, create_engine
 from config import POSTGRES_URL
 import psycopg2
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.output_parsers import StrOutputParser
+from langchain.memory import ConversationBufferMemory
 
 
 def get_llm():
@@ -17,9 +20,6 @@ def get_llm():
             timeout=None,
             max_retries=2,
             streaming=True,
-            # base_url="...",
-            # organization="...",
-            # other params...
         )
     elif LLM_PROVIDER == "ollama":
         return ChatOpenAI(
@@ -37,7 +37,9 @@ def get_embedding_model(provider):
     根據 provider 參數選擇要使用的 embedding 模型。
     預設使用 Ollama，但可以透過環境變數或參數切換成 OpenAI。
     """
-    if provider == "ollama":
+    if provider == "openai":
+        return OpenAIEmbeddings(api_key=OPENAI_API_KEY, model="text-embedding-3-small")  # 你可以換成其他 OpenAI embedding 模型
+    else:
         ollama_embedding_model = 'quentinz/bge-large-zh-v1.5:latest' # 'bge-m3:latest'
         return OllamaEmbeddings(model=ollama_embedding_model, base_url="http://10.96.196.63:11434")  # 你可以換成你在 Ollama 內部訓練的 embedding 模型
     
@@ -81,9 +83,6 @@ def retrieve_similar_chunks(query, vector_table, top_k=5) -> list:
         if conn:
             conn.close()
 
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.memory import ConversationBufferMemory
-from langchain_core.output_parsers import StrOutputParser
 
 def main():
     query = '請問甚麼是802.11ax'
@@ -152,16 +151,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-# messages = [
-#     (
-#         "system",
-#         "You are a helpful assistant that translates English to 繁體中文. Translate the user sentence.",
-#     ),
-#     ("user", user_inputs),
-#     ("assistant", "翻譯成繁體中文"),
-# ]
 
 
 # # 呼叫模型並逐步輸出

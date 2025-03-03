@@ -4,6 +4,7 @@ langchain-ollama
 openai
 langchain_openai
 sqlalchemy
+psycopg2
 psycopg2-binary
 paramiko
 langchain-text-splitters
