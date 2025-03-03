@@ -1,8 +1,7 @@
 from langchain_openai import ChatOpenAI
-from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_community.callbacks import StreamlitCallbackHandler
 # from langchain_community.memory import ConversationBufferWindowMemory
-# from langchain_community.agents import ConversationalChatAgent, AgentExecutor
+from langchain_core.messages import SystemMessage
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 from config import OPENAI_API_KEY
  
@@ -70,31 +69,44 @@ if prompt:
         openai_api_base=openai_api_base,
     )
  
-    tools = [DuckDuckGoSearchRun(name="Search")]
-    chat_agent = ConversationalChatAgent.from_llm_and_tools(llm=llm, tools=tools)
+    from langchain_core.messages import trim_messages
+    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.graph import START, MessagesState, StateGraph
+
+    # Define trimmer
+    # count each message as 1 "token" (token_counter=len) and keep only the last two messages
+    trimmer = trim_messages(strategy="last", max_tokens=2, token_counter=len)
+
+    workflow = StateGraph(state_schema=MessagesState)
+
+
+    # Define the function that calls the model
+    def call_model(state: MessagesState):
+        trimmed_messages = trimmer.invoke(state["messages"])
+        system_prompt = (
+            "You are a helpful assistant. "
+            "Answer all questions to the best of your ability."
+        )
+        messages = [SystemMessage(content=system_prompt)] + trimmed_messages
+        response = model.invoke(messages)
+        return {"messages": response}
+
+
+    # Define the node and edge
+    workflow.add_node("model", call_model)
+    workflow.add_edge(START, "model")
+
+    # Add simple in-memory checkpointer
+    memory = MemorySaver()
+    app = workflow.compile(checkpointer=memory)
  
-    # 記憶體管理
-    memory = ConversationBufferWindowMemory(
-        chat_memory=message_history,
-        return_messages=True,
-        memory_key="chat_history",
-        output_key="output",
-        k=6,
-    )
- 
-    # 執行 Agent
-    executor = AgentExecutor.from_agent_and_tools(
-        agent=chat_agent,
-        tools=tools,
-        memory=memory,
-        return_intermediate_steps=True,
-        handle_parsing_errors=True,
-    )
+
  
     # 增加 AI 回應
     with st.chat_message("ai"):
         st_cb = StreamlitCallbackHandler(st.container(), expand_new_thoughts=False)
-        response = executor(prompt, callbacks=[st_cb])
+        response = app.invoke({"messages": prompt}, config={"configurable": {"thread_id": 42}})
+
         st.write(response["output"])
  
     # 儲存中間步驟

@@ -85,75 +85,81 @@ def retrieve_similar_chunks(query, vector_table, top_k=5) -> list:
 
 
 def main():
-    query = '請問甚麼是802.11ax'
-    retrieved_data = retrieve_similar_chunks(query, "wifi_knowledge_embedding_bge", top_k=5)
 
-    # Get retrieved context and its similiarity
-    context_list = list(zip([context[1] for context in retrieved_data], [context[2] for context in retrieved_data]))
-    # Get file_name and its remote path
-    file_info_list = list(zip([document[0] for document in retrieved_data], [document[3] for document in retrieved_data]))
+    # https://python.langchain.com/api_reference/core/prompts/langchain_core.prompts.chat.ChatPromptTemplate.html
+    prompt = ChatPromptTemplate(
+            [
+                ("system", """
+                你是一位在 WiFi 6、WiFi 7 與 802.11 協議的專家，請根據參考資訊回答問題：
+                
+                參考資訊：
+                {context}
 
-    context_chunks = [thing[0] for thing in context_list]
-    formatted_context = "\n\n".join(context_chunks)
+                注意：
+                1. 你只能依據提供的資訊回答，請勿編造內容。
+                2. 若無足夠資訊，請回答「根據目前資訊無法回答」。
+                3. 請以專業、精確的方式，以繁體中文為主回答問題。
+                4. 如果是打招呼，請禮貌回復。
+                """),
+                ("human", '{user_query}'), 
+                ("ai", """
+                    您的問題是: {user_query}。
+                    我將參考 {context} 回答您的問題。
+                """), 
+                MessagesPlaceholder("conversation")  # 用來放對話歷史
+            ]
+        )
 
-
-
-    prompt = ChatPromptTemplate([
-        ("system", """
-        你是一位在 WiFi 6、WiFi 7 與 802.11 協議的專家，請根據參考資訊回答問題：
-        
-        參考資訊：
-        {context}
-
-        注意：
-        1. 你只能依據提供的資訊回答，請勿編造內容。
-        2. 若無足夠資訊，請回答「根據目前資訊無法回答」。
-        3. 請以專業、精確的方式回答問題。
-        """),
-        MessagesPlaceholder("conversation")  # 用來放對話歷史
-    ])
-
-
-    llm = get_llm()
+    llm_model = get_llm()
 
     # **3. 啟用對話記憶**
     memory = ConversationBufferMemory(memory_key="conversation", return_messages=True)
 
     # **6. 建立串流 chain**
-    chain = prompt | llm | StrOutputParser()
+    chain = prompt | llm_model
+    # chain = prompt | llm | StrOutputParser()
 
     # **7. 問答迴圈**
     while True:
-        user_input = input("請輸入你的問題（輸入 'exit' 離開）：")
-        if user_input.lower() == "exit":
+        user_query = input("請輸入你的問題（輸入 'exit' 離開）：")
+        if user_query.lower() == "exit":
             break
         
         # **更新記憶**
-        memory.chat_memory.add_user_message(user_input)
+        memory.chat_memory.add_user_message(user_query)
 
-        # **開始 Streaming 回應**
+
+
+        #### ---------------Retrieve similar chunks---------------
+        retrieved_data = retrieve_similar_chunks(user_query, "wifi_knowledge_embedding_bge", top_k=5)
+
+        # Get retrieved context and its similiarity
+        context_list = list(zip([context[1] for context in retrieved_data], [context[2] for context in retrieved_data]))
+        # Get file_name and its remote path
+        file_info_list = list(zip([document[0] for document in retrieved_data], [document[3] for document in retrieved_data]))
+
+        context_chunks = [thing[0] for thing in context_list]
+    ## RERANKING
+        formatted_context = "\n\n".join(context_chunks)
+        #### ---------------Retrieve similar chunks---------------
+
+
+
         print("\nAI 回答：", end="", flush=True)
-        response_stream = llm.stream({
-            "context": formatted_context,
-            "question": user_input,
-            "conversation": memory.load_memory_variables({})["conversation"]
-        })
+        full_conversation = ''
 
-        full_response = ""
-        for chunk in response_stream:
-            print(chunk.content, end="", flush=True)  # ✅ **即時顯示逐字回應**
-            full_response += chunk.content
+        for ai_reply in chain.stream({
+            "context": formatted_context,
+            "user_query": user_query,
+            "conversation": memory.load_memory_variables({})["conversation"]
+        }):
+            print(ai_reply.content, end="", flush=True)
+            full_conversation += ai_reply.content
 
         print("\n")  # 換行
 
         # **儲存 AI 回應**
-        memory.chat_memory.add_ai_message(full_response)
+        memory.chat_memory.add_ai_message(full_conversation)
 
 if __name__ == "__main__":
     main()
-
-
-# # 呼叫模型並逐步輸出
-# llm = get_llm()
-# for chunk in llm.stream(messages):
-#     print(chunk.content, end="", flush=True)  # 逐字輸出

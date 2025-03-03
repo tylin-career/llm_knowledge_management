@@ -9,3 +9,6 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY') or getpass.getpass('Enter your Open
 LLM_PROVIDER = os.getenv('LLM_PROVIDER')
 POSTGRES_URL = os.getenv('POSTGRES_URL')
 EMBEDDING_PROVIDER = os.getenv('EMBEDDING_PROVIDER')
+LANGSMITH_API_KEY = os.getenv('LANGSMITH_API_KEY')
+
+os.environ["LANGSMITH_TRACING"] = "true"
