@@ -1,31 +1,35 @@
 from langchain_openai import ChatOpenAI
 from langchain_ollama import OllamaEmbeddings
 from langchain_openai import OpenAIEmbeddings
-from config import LLM_PROVIDER, OPENAI_API_KEY
+from config import LLM_PROVIDER, OPENAI_API_KEY, POSTGRES_URL
 from postgresql import get_pg_engine
-from config import POSTGRES_URL
 import psycopg2
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 from langchain.memory import ConversationBufferMemory
 
 
-def get_llm():
+
+
+def get_llm(model, openai_api_key, openai_api_base, temperature):
     if LLM_PROVIDER == "openai":
+        print('使用 openai')
         return ChatOpenAI(
-            model="gpt-3.5-turbo",
-            temperature=0,
+            model=model,
             api_key=OPENAI_API_KEY,
+            temperature=temperature,
             max_tokens=None,
             timeout=None,
             max_retries=2,
             streaming=True,
         )
     elif LLM_PROVIDER == "ollama":
+        print('使用 ollama')
         return ChatOpenAI(
-            model="llama3.1",
-            openai_api_key="ollama",
-            openai_api_base="http://10.96.196.63:11434/v1/",
+            model=model,
+            openai_api_key=openai_api_key,
+            openai_api_base=openai_api_base,
+            temperature=temperature,
             streaming=True,
         )
     else:
@@ -83,9 +87,7 @@ def retrieve_similar_chunks(query, vector_table, top_k=5) -> list:
         if conn:
             conn.close()
 
-
-def main():
-
+def get_prompt():
     # https://python.langchain.com/api_reference/core/prompts/langchain_core.prompts.chat.ChatPromptTemplate.html
     prompt = ChatPromptTemplate(
             [
@@ -109,14 +111,24 @@ def main():
                 MessagesPlaceholder("conversation")  # 用來放對話歷史
             ]
         )
+    return prompt
 
-    llm_model = get_llm()
+
+
+def main():
+    model = 'llama3.1'
+    openai_api_key = 'ollama'
+    openai_api_base = 'http://10.96.196.63:11434/v1/'
+    temperature = 0
+
+    llm = get_llm(model, openai_api_key, openai_api_base, temperature)
+    prompt = get_prompt()
 
     # **3. 啟用對話記憶**
     memory = ConversationBufferMemory(memory_key="conversation", return_messages=True)
 
     # **6. 建立串流 chain**
-    chain = prompt | llm_model
+    chain = prompt | llm
     # chain = prompt | llm | StrOutputParser()
 
     # **7. 問答迴圈**
@@ -161,5 +173,3 @@ def main():
         # **儲存 AI 回應**
         memory.chat_memory.add_ai_message(full_conversation)
 
-if __name__ == "__main__":
-    main()
