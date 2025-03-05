@@ -1,27 +1,64 @@
 from langchain_openai import ChatOpenAI
 from langchain_community.callbacks import StreamlitCallbackHandler
-from langchain_core.messages import SystemMessage
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
-from main import get_prompt, retrieve_similar_chunks
+from main import retrieve_similar_chunks
 from langchain_core.runnables.history import RunnableWithMessageHistory
 import streamlit as st
 from langchain.chains.conversation.memory import ConversationSummaryBufferMemory
 # from langchain_community.memory import ConversationBufferWindowMemory
 from config import LLM_PROVIDER, OPENAI_API_KEY
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+
 
 st.set_page_config(page_title='Streamlit 知識管理對話系統')
 st.title("💬 Chatbot")
-st.caption("🚀 ASUS Knowledge Management Simularted by NPSPO")
+st.caption("🚀 ASUS Knowledge Management Simulation Powered by NPSPO")
+
+# 加入自訂 CSS，讓下拉選單展開時有動畫
+st.markdown(
+    """
+    <style>
+        /* 讓 selectbox 本身滑鼠懸停時有特效 */
+        div[data-baseweb="select"] {
+            transition: all 0.3s ease-in-out;
+        }
+
+        div[data-baseweb="select"]:hover {
+            background-color: #f0f0f0 !important;
+            border-radius: 8px;
+        }
+
+        /* 設定下拉選單本體 */
+        div[role="listbox"] {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        /* 定義動畫 */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 
 with st.sidebar:
+    st.title("Navigation and Settings")
     model = st.selectbox(
-        'Model', ('llama3.1', 'gpt-3.5-turbo')
+        'Model', 'gpt-3.5-turbo'
+        # 'Model', ['llama3.1', 'gpt-3.5-turbo']
     )
     openai_api_key = st.text_input(
-        'OpenAI API Key', value = 'ollama', type = 'password'
+        'OpenAI API Key', value = OPENAI_API_KEY, type = 'password'
+        # 'OpenAI API Key', value = 'ollama', type = 'password'
     )
     openai_api_base = st.text_input(
-        'OpenAI API Base', value = 'http://10.96.196.63:11434/v1/'
+        'OpenAI API Base', value = 'https://api.openai.com/v1/' # 'http://10.96.196.63:11434/v1/'
+        # 'OpenAI API Base', value = 'http://10.96.196.63:11434/v1/'
     )
     temperature = st.slider(
         'Temperature', 0.0, 1.0, value = 0.6, step = 0.1
@@ -30,17 +67,17 @@ with st.sidebar:
 
 # 初始化聊天歷史
 if "messages" not in st.session_state:
-    st.session_state["messages"] = [{"role": "assistant", "content": "歡迎來到知識問答系統"}]
+    st.session_state["messages"] = []
 
 # 顯示歷史聊天記錄
 for msg in st.session_state.messages:
-    st.chat_message(msg["role"]).write(msg["content"])
+    if isinstance(msg, HumanMessage):
+        with st.chat_message("Human"):
+            st.markdown(msg.content)
+    elif isinstance(msg, AIMessage):
+        with st.chat_message("AI"):
+            st.markdown(msg.content)
 
-# streamlit_key = 'Derek'
-# # 使用 st.session_state 儲存聊天歷史，避免重新渲染時重建物件
-# if "chat_history" not in st.session_state:
-#     st.session_state["chat_history"] = StreamlitChatMessageHistory(key=streamlit_key)
-# history = st.session_state["chat_history"]
 
 
 def get_llm(model, openai_api_key, openai_api_base, temperature):
@@ -64,61 +101,69 @@ def get_llm(model, openai_api_key, openai_api_base, temperature):
             streaming=True,
         )
 
+
+def get_response(user_query, formatted_context, chat_history):
+    template = '''
+        你是一位在 WiFi 6、WiFi 7 與 802.11 協議的專家，請根據參考資訊與對話紀錄回答問題：
+
+        User question: {user_query}
+        參考資訊：{formatted_context}
+        Chat history: {chat_history}
+
+        注意：
+            1. 你只能依據提供的資訊回答，請勿編造內容。
+            2. 若無足夠資訊，請回答「根據目前資訊無法回答」。
+            3. 請以專業、精確的方式，以繁體中文為主回答問題。
+    '''
+
+    # https://python.langchain.com/api_reference/core/prompts/langchain_core.prompts.chat.ChatPromptTemplate.html
+    prompt = ChatPromptTemplate.from_template(template)
+    llm = get_llm(model, openai_api_key, openai_api_base, temperature)
+    chain = prompt | llm | StrOutputParser()
+    return chain.stream(
+        {
+            'user_query': user_query,
+            'formatted_context': formatted_context,
+            'chat_history': chat_history
+        }
+    )
+
+
 # 清除 session 並重設 messages
 if st.sidebar.button('清空歷史紀錄'):
     st.session_state.clear()  # 清除所有 session state
-    st.session_state["messages"] = [{"role": "assistant", "content": "歡迎來到知識問答系統"}]
+    st.session_state["messages"] = []
+    st.rerun()
 
 
-
-# if not st.session_state.messages or len(st.session_state.messages) == 0 or st.sidebar.button('清空歷史紀錄'):
-#     st.session_state.clear()
-#     st.session_state.add_ai_message('歡迎來到知識問答對話系統')
-
-
-
-# def get_response(user_query, formatted_context):
-#     return chain.stream(
-#         {
-#             'user_query': user_query,
-#             'context': formatted_context,
-#             "conversation": memory.load_memory_variables({})["conversation"]
-#         }
-#     )
-
-def get_response(user_query, formatted_context):
-    return 'AI 回答'
-
+import time
 # # 增加輸入框
 if user_query := st.chat_input(placeholder="請輸入提問內容"):
+    # 增加使用者的提問到聊天記錄
+    st.session_state.messages.append(HumanMessage(user_query))
+    with st.chat_message("Human"):
+        st.markdown(user_query)
+
+
+    with st.spinner("Searching knowledge base..."):
+        time.sleep(1.5)
+        # retrieved_data = retrieve_similar_chunks(user_query, "wifi_knowledge_embedding_bge", top_k=5)
+        # context_list = list(zip([context[1] for context in retrieved_data], [context[2] for context in retrieved_data]))
+        # # Get file_name and its remote path
+        # file_info_list = list(zip([document[0] for document in retrieved_data], [document[3] for document in retrieved_data]))
+        # context_chunks = [thing[0] for thing in context_list]
+        # formatted_context = "\n\n".join(context_chunks)
+        formatted_context = "some sample context" # self.generator.search_db(user_query)
+
     # 檢查 OpenAI API 金鑰是否存在
     if not openai_api_key:
         st.info("請先輸入 OpenAI API Key")
         st.stop()
-    llm = get_llm(model, openai_api_key, openai_api_base, temperature)
-    prompt = get_prompt()
-    # memory = ConversationBufferMemory(chat_memory=history, memory_key="conversation", return_messages=True)
-    chain = prompt | llm
 
 
-    # 增加使用者的提問到聊天記錄
-    st.session_state.messages.append({"role": "user", "content": user_query})
-    st.chat_message("user").write(user_query)
+    with st.chat_message("AI"):
+        ai_response = st.write_stream(get_response(user_query, formatted_context, st.session_state.messages))
+    st.session_state.messages.append(AIMessage(ai_response))
 
 
-    formatted_context = "context"
-    ai_response = get_response(user_query, formatted_context)
-    st.session_state.messages.append({"role": "assistant", "content": ai_response})
-    st.chat_message("assistant").write(ai_response)
-
-
-#     retrieved_data = retrieve_similar_chunks(user_query, "wifi_knowledge_embedding_bge", top_k=5)
-#     context_list = list(zip([context[1] for context in retrieved_data], [context[2] for context in retrieved_data]))
-#     # Get file_name and its remote path
-#     file_info_list = list(zip([document[0] for document in retrieved_data], [document[3] for document in retrieved_data]))
-#     context_chunks = [thing[0] for thing in context_list]
-#     formatted_context = "\n\n".join(context_chunks)
-
-
-#     ai_reponses = get_response(user_query, formatted_context)
-#     st.chat_message("ai").write(ai_reponses)
+# uploaded_file = st.file_uploader("選擇一個 CSV 檔案", type="csv")
