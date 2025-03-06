@@ -49,20 +49,26 @@ st.markdown(
 with st.sidebar:
     st.title("Navigation and Settings")
     model = st.selectbox(
-        'Model', 'gpt-3.5-turbo'
-        # 'Model', ['llama3.1', 'gpt-3.5-turbo']
+        # 'Model', 'gpt-3.5-turbo'
+        'Model', ['llama3.1', 'gpt-3.5-turbo']
     )
     openai_api_key = st.text_input(
-        'OpenAI API Key', value = OPENAI_API_KEY, type = 'password'
-        # 'OpenAI API Key', value = 'ollama', type = 'password'
+        # 'OpenAI API Key', value = OPENAI_API_KEY, type = 'password'
+        'OpenAI API Key', value = 'ollama', type = 'password'
     )
     openai_api_base = st.text_input(
-        'OpenAI API Base', value = 'https://api.openai.com/v1/' # 'http://10.96.196.63:11434/v1/'
-        # 'OpenAI API Base', value = 'http://10.96.196.63:11434/v1/'
+        # 'OpenAI API Base', value = 'https://api.openai.com/v1/' # 'http://10.96.196.63:11434/v1/'
+        'OpenAI API Base', value = 'http://10.96.196.63:11434/v1/'
     )
     temperature = st.slider(
         'Temperature', 0.0, 1.0, value = 0.6, step = 0.1
     )
+    if st.sidebar.button('Clear Chat History'):
+        st.session_state.clear()
+        st.session_state["messages"] = []
+        st.rerun()
+    st.markdown('---')
+    uploaded_file = st.file_uploader("📂 Upload Files", type=["doc", "docx", "txt", "md", "pdf"])
 
 
 # 初始化聊天歷史
@@ -107,11 +113,11 @@ def get_response(user_query, formatted_context, chat_history):
         你是一位在 WiFi 6、WiFi 7 與 802.11 協議的專家，請根據參考資訊與對話紀錄回答問題：
 
         User question: {user_query}
-        參考資訊：{formatted_context}
+        知識庫擷取的參考資訊：{formatted_context}
         Chat history: {chat_history}
 
         注意：
-            1. 你只能依據提供的資訊回答，請勿編造內容。
+            1. 你需要依據提供的資訊與聊天紀錄回答，請勿編造內容。
             2. 若無足夠資訊，請回答「根據目前資訊無法回答」。
             3. 請以專業、精確的方式，以繁體中文為主回答問題。
     '''
@@ -129,13 +135,6 @@ def get_response(user_query, formatted_context, chat_history):
     )
 
 
-# 清除 session 並重設 messages
-if st.sidebar.button('清空歷史紀錄'):
-    st.session_state.clear()  # 清除所有 session state
-    st.session_state["messages"] = []
-    st.rerun()
-
-
 import time
 # # 增加輸入框
 if user_query := st.chat_input(placeholder="請輸入提問內容"):
@@ -147,13 +146,13 @@ if user_query := st.chat_input(placeholder="請輸入提問內容"):
 
     with st.spinner("Searching knowledge base..."):
         time.sleep(1.5)
-        # retrieved_data = retrieve_similar_chunks(user_query, "wifi_knowledge_embedding_bge", top_k=5)
-        # context_list = list(zip([context[1] for context in retrieved_data], [context[2] for context in retrieved_data]))
-        # # Get file_name and its remote path
-        # file_info_list = list(zip([document[0] for document in retrieved_data], [document[3] for document in retrieved_data]))
-        # context_chunks = [thing[0] for thing in context_list]
-        # formatted_context = "\n\n".join(context_chunks)
-        formatted_context = "some sample context" # self.generator.search_db(user_query)
+        retrieved_data = retrieve_similar_chunks(user_query, "wifi_knowledge_embedding_bge", top_k=5)
+        context_list = list(zip([context[1] for context in retrieved_data], [context[2] for context in retrieved_data]))
+        # Get file_name and its remote path
+        file_info_list = list(zip([document[0] for document in retrieved_data], [document[3] for document in retrieved_data]))
+        context_chunks = [thing[0] for thing in context_list]
+        formatted_context = "\n\n".join(context_chunks)
+        # formatted_context = "some sample context" # self.generator.search_db(user_query)
 
     # 檢查 OpenAI API 金鑰是否存在
     if not openai_api_key:
@@ -163,7 +162,25 @@ if user_query := st.chat_input(placeholder="請輸入提問內容"):
 
     with st.chat_message("AI"):
         ai_response = st.write_stream(get_response(user_query, formatted_context, st.session_state.messages))
+    with st.expander('Knowledge Base References'):
+        for i, (document_name, original_text, cosine_distance, file_path) in enumerate(retrieved_data):
+            st.markdown("**Source:**")
+            file_path = f'./downloads/{document_name}'
+            
+            # 確保檔案存在
+            try:
+                with open(file_path, "rb") as file:
+                    # 按下按鈕時，更新 session_state
+                    if st.download_button(label=f"📥 {document_name}", data=file, file_name=document_name, key=f"download_{i}"):
+                        st.session_state["downloaded_files"][document_name] = True
+            except FileNotFoundError:
+                st.warning(f"檔案 {document_name} 不存在")
+
+            # Content 換行並加入 Tab 縮排
+            st.markdown("**Content:**  \n" + f"&emsp;&emsp;{original_text}", unsafe_allow_html=True)
+            st.write(
+                f'**Relavance Score：** {100 - round(cosine_distance * 100, 2)}%'
+            )
+            st.divider()
+
     st.session_state.messages.append(AIMessage(ai_response))
-
-
-# uploaded_file = st.file_uploader("選擇一個 CSV 檔案", type="csv")

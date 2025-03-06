@@ -13,7 +13,15 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.vectorstores import InMemoryVectorStore
 from datetime import datetime
 import pytz
+from sklearn.feature_extraction.text import TfidfVectorizer
+import numpy as np
+import pandas as pd
 # from tabulate import tabulate
+
+import json
+import sqlalchemy
+from pgvector.sqlalchemy import Vector
+from sqlalchemy.dialects.postgresql import JSONB
 
 tz = pytz.timezone("Asia/Taipei")
 
@@ -111,9 +119,7 @@ def get_loader(local_file_path, file_ext:str):
     elif file_ext == '.txt':
         return None
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-import numpy as np
-import pandas as pd
+
 
 def filter_chunks(chunks, percentile_threshold=30):
     """
@@ -136,10 +142,9 @@ def filter_chunks(chunks, percentile_threshold=30):
     # 設定過濾閾值（低於此閾值的 chunk 會被過濾）
     threshold = np.percentile(tfidf_scores, percentile_threshold)
 
-    # 判斷哪些 chunk 要保留
+    # 保留 threshold 以內的 chunk
     filtered_chunks = [(chunk, score, score >= threshold) for chunk, score in zip(chunks, tfidf_scores)]
     
-    # 轉為 DataFrame 方便查看
     df = pd.DataFrame(filtered_chunks, columns=["Chunk", "TF-IDF Score", "Keep"])
     # print(tabulate(df, headers="keys", tablefmt="fancy_grid"))
     return df
@@ -188,6 +193,9 @@ for file in files:
         ],
     )
     splitted_chunks = text_splitter.split_text(document_text_page_content)
+
+# 需要過濾掉一些不重要的 chunks，以及預處理 chunks
+
     df = filter_chunks(splitted_chunks, percentile_threshold=30)
     
     embedding_model = get_embedding_model(EMBEDDING_PROVIDER)
@@ -197,11 +205,6 @@ for file in files:
     for idx, (chunk, vector) in enumerate(zip(splitted_chunks, vectors), start=1):
         data.append([document_name, idx, chunk, '', vector, current_time, file_path, file])
 
-
-import json
-import sqlalchemy
-from pgvector.sqlalchemy import Vector
-from sqlalchemy.dialects.postgresql import JSONB
 
 df = pd.DataFrame(data, columns=['document_name', 'chunk_id', 'original_text', 'cleaned_text', 'embedding', 'process_datetime', 'file_path', 'metadata'])
 df['cleaned_text'] = df['original_text'].apply(lambda x: x.replace("\n", " ").replace("\r", " ") if isinstance(x, str) else x)
