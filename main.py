@@ -173,3 +173,4 @@ def main():
         # **儲存 AI 回應**
         memory.chat_memory.add_ai_message(full_conversation)
 
+main()

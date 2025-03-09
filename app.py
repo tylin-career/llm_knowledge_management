@@ -88,7 +88,7 @@ for msg, src_docs in zip(st.session_state.messages, st.session_state.source_docu
             st.markdown(msg.content)
     with st.expander("Knowledge Base References"):
         for doc in src_docs:
-            st.markdown(doc)
+            st.markdown(doc[0])
             st.divider()
 
 
@@ -158,6 +158,9 @@ if user_query := st.chat_input(placeholder="請輸入提問內容"):
         # Get file_name and its remote path
         file_info_list = list(zip([document[0] for document in retrieved_data], [document[3] for document in retrieved_data]))
         context_chunks = [thing[0] for thing in context_list]
+
+        st.session_state.source_documents.append(retrieved_data)
+        
         formatted_context = "\n\n".join(context_chunks)
         # formatted_context = "some sample context" # self.generator.search_db(user_query)
 
