@@ -77,19 +77,15 @@ if "messages" not in st.session_state:
 if "source_documents" not in st.session_state:
     st.session_state["source_documents"] = []
 
-
 # 顯示歷史聊天記錄
-for msg, src_docs in zip(st.session_state.messages, st.session_state.source_documents):
+for msg in st.session_state.messages:
     if isinstance(msg, HumanMessage):
         with st.chat_message("Human"):
             st.markdown(msg.content)
     elif isinstance(msg, AIMessage):
         with st.chat_message("AI"):
             st.markdown(msg.content)
-    with st.expander("Knowledge Base References"):
-        for doc in src_docs:
-            st.markdown(doc[0])
-            st.divider()
+    
 
 
 
@@ -159,8 +155,6 @@ if user_query := st.chat_input(placeholder="請輸入提問內容"):
         file_info_list = list(zip([document[0] for document in retrieved_data], [document[3] for document in retrieved_data]))
         context_chunks = [thing[0] for thing in context_list]
 
-        st.session_state.source_documents.append(retrieved_data)
-        
         formatted_context = "\n\n".join(context_chunks)
         # formatted_context = "some sample context" # self.generator.search_db(user_query)
 
@@ -194,3 +188,4 @@ if user_query := st.chat_input(placeholder="請輸入提問內容"):
             st.divider()
 
     st.session_state.messages.append(AIMessage(ai_response))
+    st.session_state.source_documents.append(retrieved_data)
