@@ -86,24 +86,8 @@ for msg in st.session_state.messages:
         with st.chat_message("AI"):
             st.markdown(msg.content)
     with st.expander('Knowledge Base References'):
-        for i, (document_name, original_text, cosine_distance, file_path) in enumerate(st.session_state.source_documents):
-            st.markdown("**Source:**")
-            file_path = f'./downloads/{document_name}'
-            
-            # 確保檔案存在
-            try:
-                with open(file_path, "rb") as file:
-                    # 按下按鈕時，更新 session_state
-                    if st.download_button(label=f"📥 {document_name}", data=file, file_name=document_name, key=f"download_{i}"):
-                        st.session_state["downloaded_files"][document_name] = True
-            except FileNotFoundError:
-                st.warning(f"檔案 {document_name} 不存在")
-
-            # Content 換行並加入 Tab 縮排
-            st.markdown("**Content:**  \n" + f"&emsp;&emsp;{original_text}", unsafe_allow_html=True)
-            st.write(
-                f'**Relavance Score：** {100 - round(cosine_distance * 100, 2)}%'
-            )
+        for src_docs in st.session_state.source_documents:
+            st.markdown(f"{src_docs}")
             st.divider()
     
 
