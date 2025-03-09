@@ -74,15 +74,22 @@ with st.sidebar:
 # 初始化聊天歷史
 if "messages" not in st.session_state:
     st.session_state["messages"] = []
+if "source_documents" not in st.session_state:
+    st.session_state["source_documents"] = []
+
 
 # 顯示歷史聊天記錄
-for msg in st.session_state.messages:
+for msg, src_docs in zip(st.session_state.messages, st.session_state.source_documents):
     if isinstance(msg, HumanMessage):
         with st.chat_message("Human"):
             st.markdown(msg.content)
     elif isinstance(msg, AIMessage):
         with st.chat_message("AI"):
             st.markdown(msg.content)
+    with st.expander("Knowledge Base References"):
+        for doc in src_docs:
+            st.markdown(doc)
+            st.divider()
 
 
 
