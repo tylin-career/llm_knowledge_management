@@ -19,3 +19,5 @@ scikit-learn
 # unstructured
 pytesseract
 pdf2image
+torch
+psutil
