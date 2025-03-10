@@ -17,3 +17,5 @@ sentence_transformers
 # docx2txt
 scikit-learn
 # unstructured
+pytesseract
+pdf2image
