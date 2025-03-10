@@ -76,45 +76,19 @@ if "messages" not in st.session_state:
     st.session_state["messages"] = []
 if "source_documents" not in st.session_state:
     st.session_state["source_documents"] = []
-if "downloaded_files" not in st.session_state:
-    st.session_state["downloaded_files"] = {}
 
 # 顯示歷史聊天記錄
-for idx, msg in enumerate(st.session_state.messages):
+for msg in st.session_state.messages:
     if isinstance(msg, HumanMessage):
         with st.chat_message("Human"):
             st.markdown(msg.content)
     elif isinstance(msg, AIMessage):
         with st.chat_message("AI"):
             st.markdown(msg.content)
-            # 只在 AI 回應後顯示相關的參考文檔
-            if idx // 2 < len(st.session_state.source_documents):  # 每對人機對話對應一個文檔參考
-                with st.expander('Knowledge Base References'):
-                    src_docs = st.session_state.source_documents[idx // 2]
-                    for i, (document_name, original_text, cosine_distance, file_path) in enumerate(src_docs):
-                        st.markdown("**Source:**")
-                        file_path = f'./downloads/{document_name}'
-                        
-                        # 確保檔案存在
-                        try:
-                            with open(file_path, "rb") as file:
-                                # 按下按鈕時，更新 session_state
-                                if st.download_button(
-                                    label=f"📥 {document_name}", 
-                                    data=file, 
-                                    file_name=document_name, 
-                                    key=f"download_{idx}_{i}"
-                                ):
-                                    pass  # 按鈕功能已經在 st.download_button 中實現
-                        except FileNotFoundError:
-                            st.warning(f"檔案 {document_name} 不存在")
-
-                        # Content 換行並加入 Tab 縮排
-                        st.markdown("**Content:**  \n" + f"&emsp;&emsp;{original_text}", unsafe_allow_html=True)
-                        st.write(
-                            f'**Relavance Score：** {100 - round(cosine_distance * 100, 2)}%'
-                        )
-                        st.divider()
+    with st.expander('Knowledge Base References'):
+        for src_docs in st.session_state.source_documents:
+            st.markdown(f"{src_docs}")
+            st.divider()
     
 
 
@@ -169,12 +143,13 @@ def get_response(user_query, formatted_context, chat_history):
 
 
 import time
-# 當使用者提交新查詢時
+# # 增加輸入框
 if user_query := st.chat_input(placeholder="請輸入提問內容"):
     # 增加使用者的提問到聊天記錄
     st.session_state.messages.append(HumanMessage(user_query))
     with st.chat_message("Human"):
         st.markdown(user_query)
+
 
     with st.spinner("Searching knowledge base..."):
         time.sleep(1.5)
@@ -185,41 +160,36 @@ if user_query := st.chat_input(placeholder="請輸入提問內容"):
         context_chunks = [thing[0] for thing in context_list]
 
         formatted_context = "\n\n".join(context_chunks)
+        # formatted_context = "some sample context" # self.generator.search_db(user_query)
 
     # 檢查 OpenAI API 金鑰是否存在
     if not openai_api_key:
         st.info("請先輸入 OpenAI API Key")
         st.stop()
 
+
     with st.chat_message("AI"):
         ai_response = st.write_stream(get_response(user_query, formatted_context, st.session_state.messages))
-        
-        # 將 AI 回應後直接在同一個聊天訊息框內顯示參考資料
-        with st.expander('Knowledge Base References'):
-            for i, (document_name, original_text, cosine_distance, file_path) in enumerate(retrieved_data):
-                st.markdown("**Source:**")
-                file_path = f'./downloads/{document_name}'
-                
-                # 確保檔案存在
-                try:
-                    with open(file_path, "rb") as file:
-                        # 使用唯一的 key
-                        unique_key = f"download_latest_{i}"
-                        if st.download_button(label=f"📥 {document_name}", 
-                                              data=file, 
-                                              file_name=document_name, 
-                                              key=unique_key):
-                            pass  # 下載按鈕功能由 st.download_button 處理
-                except FileNotFoundError:
-                    st.warning(f"檔案 {document_name} 不存在")
+    with st.expander('Knowledge Base References'):
+        for i, (document_name, original_text, cosine_distance, file_path) in enumerate(retrieved_data):
+            st.markdown("**Source:**")
+            file_path = f'./downloads/{document_name}'
+            
+            # 確保檔案存在
+            try:
+                with open(file_path, "rb") as file:
+                    # 按下按鈕時，更新 session_state
+                    if st.download_button(label=f"📥 {document_name}", data=file, file_name=document_name, key=f"download_{i}"):
+                        st.session_state["downloaded_files"][document_name] = True
+            except FileNotFoundError:
+                st.warning(f"檔案 {document_name} 不存在")
 
-                # Content 換行並加入 Tab 縮排
-                st.markdown("**Content:**  \n" + f"&emsp;&emsp;{original_text}", unsafe_allow_html=True)
-                st.write(
-                    f'**Relavance Score：** {100 - round(cosine_distance * 100, 2)}%'
-                )
-                st.divider()
+            # Content 換行並加入 Tab 縮排
+            st.markdown("**Content:**  \n" + f"&emsp;&emsp;{original_text}", unsafe_allow_html=True)
+            st.write(
+                f'**Relavance Score：** {100 - round(cosine_distance * 100, 2)}%'
+            )
+            st.divider()
 
-    # 將 AI 回應和來源文檔保存到 session_state
     st.session_state.messages.append(AIMessage(ai_response))
     st.session_state.source_documents.append(retrieved_data)
