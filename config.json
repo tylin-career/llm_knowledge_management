@@ -1,0 +1,10 @@
+{
+    "postgres_db": {
+        "host": "10.96.196.63",
+        "port": "5432",
+        "db_name": "kmsdb",
+        "use_ssl": false
+    },
+    "LLM_PROVIDER":"openai",
+    "EMBEDDING_PROVIDER":"ollama"
+}
