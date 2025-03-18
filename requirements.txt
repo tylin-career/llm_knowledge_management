@@ -21,3 +21,5 @@ pytesseract
 pdf2image
 torch
 psutil
+comtypes
+llama_index

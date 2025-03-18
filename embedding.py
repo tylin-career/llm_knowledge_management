@@ -151,23 +151,49 @@ def filter_chunks(chunks, percentile_threshold=30):
 
 
 
+import os
+import comtypes.client
+
+def docx_to_pdf(input_path, output_path=None):
+    # 確保輸入檔案存在
+    if not os.path.isfile(input_path):
+        raise FileNotFoundError(f"檔案不存在: {input_path}")
+
+    # 如果沒有指定輸出檔案，則與輸入檔案同名但副檔名為 .pdf
+    if output_path is None:
+        output_path = os.path.splitext(input_path)[0] + ".pdf"
+
+    # 啟動 Word 應用程式
+    word = comtypes.client.CreateObject("Word.Application")
+    word.Visible = False  # 不顯示 Word 視窗
+
+    try:
+        doc = word.Documents.Open(os.path.abspath(input_path))
+        doc.SaveAs(os.path.abspath(output_path), FileFormat=17)  # 17 代表 PDF 格式
+        doc.Close()
+    finally:
+        word.Quit()
+
+    return output_path
+
+
 data = []
-files = get_all_files() #[0:1]
+files = get_all_files()[0:1]
 print(f'共有 {len(get_all_files())}個檔案')
-# files = [{
-#     'document_name':'testing_file.docx',
-#     'file_path':'./downloads/testing_file.docx',
-#     'file_ext':'.docx'
-# }]
 for file in files:
     current_time = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
     document_name = file['document_name']
     file_path = file['file_path']
     file_ext = file['file_ext']
 
-    download_file_via_ssh(file['file_path'])
+    # download_file_via_ssh(file['file_path'])
 
-    loader = get_loader(f'./downloads/{document_name}', file_ext)
+    # 嘗試將檔案另存成 pdf
+    if file_ext == '.docx':
+        # output_path = docx_to_pdf(f'./downloads/{document_name}')
+        loader = get_loader(f'./downloads/{document_name}', ".pdf")
+    else:
+        loader = get_loader(f'./downloads/{document_name}', file_ext)
 
     document_text = loader.load()
     document_text_page_content = document_text[0].page_content

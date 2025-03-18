@@ -12,54 +12,27 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 
-st.set_page_config(page_title='Streamlit 知識管理對話系統')
+st.set_page_config(page_title='Streamlit 知識管理對話系統', page_icon='📊', layout='wide', initial_sidebar_state='expanded')
 st.title("💬 Chatbot")
 st.caption("🚀 ASUS Knowledge Management Simulation Powered by NPSPO")
-
-# 加入自訂 CSS，讓下拉選單展開時有動畫
-st.markdown(
-    """
-    <style>
-        /* 讓 selectbox 本身滑鼠懸停時有特效 */
-        div[data-baseweb="select"] {
-            transition: all 0.3s ease-in-out;
-        }
-
-        div[data-baseweb="select"]:hover {
-            background-color: #f0f0f0 !important;
-            border-radius: 8px;
-        }
-
-        /* 設定下拉選單本體 */
-        div[role="listbox"] {
-            animation: fadeIn 0.3s ease-in-out;
-        }
-
-        /* 定義動畫 */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
 
 
 with st.sidebar:
     st.title("Navigation and Settings")
+    st.caption("🔧 這是側邊欄的內容")
     model = st.selectbox(
         # 'Model', 'gpt-3.5-turbo'
         'Model', ['llama3.1', 'gpt-3.5-turbo']
     )
-    openai_api_key = st.text_input(
-        # 'OpenAI API Key', value = OPENAI_API_KEY, type = 'password'
-        'OpenAI API Key', value = 'ollama', type = 'password'
-    )
-    openai_api_base = st.text_input(
-        # 'OpenAI API Base', value = 'https://api.openai.com/v1/' # 'http://10.96.196.63:11434/v1/'
-        'OpenAI API Base', value = 'http://10.96.196.63:11434/v1/'
-    )
+    if model == "gpt-3.5-turbo":
+        openai_api_base = 'https://api.openai.com/v1/'
+        openai_api_key = st.text_input(
+            'OpenAI API Key', value = OPENAI_API_KEY, type = 'password'
+        )
+    else:
+        openai_api_base = 'http://10.96.196.63:11434/v1/'
+        openai_api_key = 'ollama'
+        
     temperature = st.slider(
         'Temperature', 0.0, 1.0, value = 0.6, step = 0.1
     )
