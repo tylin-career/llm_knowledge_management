@@ -10,6 +10,7 @@ from config import LLM_PROVIDER, OPENAI_API_KEY
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from home_config import Configuration
 
 
 st.set_page_config(page_title='Streamlit 知識管理對話系統', page_icon='📊', layout='wide', initial_sidebar_state='expanded')
@@ -17,25 +18,61 @@ st.title("💬 Chatbot")
 st.caption("🚀 ASUS Knowledge Management Simulation Powered by NPSPO")
 
 
+# 初始化聊天歷史
+if "messages" not in st.session_state:
+    st.session_state["messages"] = []
+if "source_documents" not in st.session_state:
+    st.session_state["source_documents"] = []
+
+
 with st.sidebar:
-    st.title("Navigation and Settings")
-    st.caption("🔧 這是側邊欄的內容")
-    model = st.selectbox(
-        # 'Model', 'gpt-3.5-turbo'
-        'Model', ['llama3.1', 'gpt-3.5-turbo']
-    )
-    if model == "gpt-3.5-turbo":
-        openai_api_base = 'https://api.openai.com/v1/'
-        openai_api_key = st.text_input(
-            'OpenAI API Key', value = OPENAI_API_KEY, type = 'password'
+    with st.form(key='my_form'):
+        st.title("Navigation and Settings")
+        st.caption("🔧 這是側邊欄的內容")
+        model = st.selectbox(
+            # 'Model', 'gpt-3.5-turbo'
+            'Model', ['llama3.1', 'gpt-3.5-turbo']
         )
-    else:
-        openai_api_base = 'http://10.96.196.63:11434/v1/'
-        openai_api_key = 'ollama'
-        
-    temperature = st.slider(
-        'Temperature', 0.0, 1.0, value = 0.6, step = 0.1
-    )
+        if model == "gpt-3.5-turbo":
+            openai_api_base = 'https://api.openai.com/v1/'
+            openai_api_key = st.text_input(
+                'OpenAI API Key', value = OPENAI_API_KEY, type = 'password'
+            )
+        else:
+            openai_api_base = 'http://10.96.196.63:11434/v1/'
+            openai_api_key = 'ollama'
+            
+        temperature = st.slider(
+            'Temperature', 0.0, 1.0, value = 0.6, step = 0.1
+        )
+
+        if "config" not in st.session_state:
+            st.session_state.config = Configuration(
+                model=model,
+                openai_api_key=openai_api_key,
+                openai_api_base=openai_api_base,
+                temperature=temperature,
+            )
+
+
+        submit_button = st.form_submit_button("儲存設定")
+        if submit_button:
+            st.session_state.config = Configuration(
+                model=model,
+                openai_api_key=openai_api_key,
+                openai_api_base=openai_api_base,
+                temperature=temperature,
+            )
+            st.success(f"設定已更新！{model}使用中")
+        else:
+            st.session_state.config = Configuration(
+                model=model,
+                openai_api_key=openai_api_key,
+                openai_api_base=openai_api_base,
+                temperature=temperature,
+            )
+
+    st.markdown('---')
     if st.sidebar.button('Clear Chat History'):
         st.session_state.clear()
         st.session_state["messages"] = []
@@ -44,11 +81,7 @@ with st.sidebar:
     uploaded_file = st.file_uploader("📂 Upload Files", type=["doc", "docx", "txt", "md", "pdf"])
 
 
-# 初始化聊天歷史
-if "messages" not in st.session_state:
-    st.session_state["messages"] = []
-if "source_documents" not in st.session_state:
-    st.session_state["source_documents"] = []
+
 
 # 顯示歷史聊天記錄
 for idx, msg in enumerate(st.session_state.messages):
