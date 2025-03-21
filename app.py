@@ -6,11 +6,11 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 import streamlit as st
 from langchain.chains.conversation.memory import ConversationSummaryBufferMemory
 # from langchain_community.memory import ConversationBufferWindowMemory
-from config import LLM_PROVIDER, OPENAI_API_KEY
+from config import OPENAI_API_KEY
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-from home_config import Configuration
+from config import Configuration
 
 
 st.set_page_config(page_title='Streamlit 知識管理對話系統', page_icon='📊', layout='wide', initial_sidebar_state='expanded')
@@ -64,13 +64,8 @@ with st.sidebar:
                 temperature=temperature,
             )
             st.success(f"設定已更新！{model}使用中")
-        else:
-            st.session_state.config = Configuration(
-                model=model,
-                openai_api_key=openai_api_key,
-                openai_api_base=openai_api_base,
-                temperature=temperature,
-            )
+
+
 
     st.markdown('---')
     if st.sidebar.button('Clear Chat History'):
