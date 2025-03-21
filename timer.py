@@ -28,39 +28,3 @@ def timing_decorator(func):
         
         return result
     return wrapper
-
-# 模擬一些函數
-@timing_decorator
-def load_data():
-    """模擬載入數據"""
-    print("載入數據中...")
-    time.sleep(1.5)  # 模擬耗時操作
-    print("數據載入完成！")
-
-@timing_decorator
-def process_data():
-    """模擬數據處理"""
-    print("處理數據中...")
-    time.sleep(2)  # 模擬運算
-    print("數據處理完成！")
-
-@timing_decorator
-def save_results():
-    """模擬保存結果"""
-    print("儲存結果中...")
-    time.sleep(0.8)
-    print("結果儲存完成！")
-
-# 主函數
-def main():
-    print("=== 程式開始 ===")
-    logging.info("=== 程式開始 ===")  # 日誌紀錄開始
-    load_data()
-    process_data()
-    save_results()
-    logging.info("=== 程式結束 ===")  # 日誌紀錄結束
-    print("=== 程式結束 ===")
-
-# 執行主程式
-if __name__ == "__main__":
-    main()

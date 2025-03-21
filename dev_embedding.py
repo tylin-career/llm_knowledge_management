@@ -1,34 +1,17 @@
 import os
-import re
-import json
-import numpy as np
-import pandas as pd
-import paramiko
-import pytz
-import sqlalchemy
-from datetime import datetime
-from sklearn.feature_extraction.text import TfidfVectorizer
-from pgvector.sqlalchemy import Vector
-from sqlalchemy.dialects.postgresql import JSONB
-
-# Langchain 相關引入
-from langchain_ollama import OllamaEmbeddings
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.document_loaders import UnstructuredWordDocumentLoader
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.document_loaders import TextLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-# 從 config 引入相關設定
-from config import POSTGRES_URL, EMBEDDING_PROVIDER, OPENAI_API_KEY
-from postgresql import get_pg_engine
-
-
-
-import os
-import platform
 import subprocess
 from pathlib import Path
+import shutil
+import paramiko
+import pytz
+from datetime import datetime
+
+# Langchain 相關引入
+from langchain_community.document_loaders import TextLoader
+
+from src.ragger import RAGGER
+from config import EmbeddingConfiguration
+
 
 
 # 設定時區
@@ -66,7 +49,7 @@ def get_all_files() -> list[dict]:
     valid_extensions = (".docx", ".doc", ".pdf", ".txt", ".md")
     filtered_files = [
         {
-            "document_name": os.path.basename(f),
+            "file_name": os.path.basename(f),
             "remote_file_path": f,
             "remote_file_ext": os.path.splitext(f)[1].lower()
         }
@@ -115,27 +98,6 @@ def download_file_via_ssh(remote_path):
         return None
 
 
-def get_embedding_model(provider):
-    """根據 provider 選擇要使用的 embedding 模型"""
-    if provider == "openai":
-        return OpenAIEmbeddings(api_key=OPENAI_API_KEY, model="text-embedding-3-small")
-    else:
-        ollama_embedding_model = 'quentinz/bge-large-zh-v1.5:latest'
-        return OllamaEmbeddings(model=ollama_embedding_model, base_url="http://10.96.196.63:11434")
-
-from unstructured.partition.pdf import partition_pdf
-def get_loader(local_file_path):
-
-    file_path = Path(f"{local_file_path}")
-    print("副檔名：", file_path.suffix)
-
-    """根據檔案類型取得對應的文件載入器"""
-    if file_path.suffix in ('.txt'):
-        return TextLoader(local_file_path, encoding='utf-8')
-    else:
-        return None
-
-
 def convert_docx_to_pdf(input_path, output_dir):
     # 執行 LibreOffice 轉換指令
     subprocess.run(
@@ -152,29 +114,29 @@ def convert_docx_to_pdf(input_path, output_dir):
     return output_pdf_path
 
 
+def get_loader(local_file_path):
 
-def is_ubuntu():
-    """檢查系統是否為 Ubuntu"""
-    if platform.system() == "Linux":
-        try:
-            with open("/etc/os-release", "r") as f:
-                for line in f:
-                    if "Ubuntu" in line:
-                        return True
-        except Exception as e:
-            print("讀取 /etc/os-release 時發生錯誤:", e)
-    return False
+    file_path = Path(f"{local_file_path}")
+    print("副檔名：", file_path.suffix)
+
+    """根據檔案類型取得對應的文件載入器"""
+    if file_path.suffix in ('.txt'):
+        return TextLoader(local_file_path, encoding='utf-8')
+    else:
+        return None
 
 
-def main():
+
+from timer import timing_decorator
+@timing_decorator
+def embedding_and_storing_main(ragger: RAGGER):
     # 取得遠端檔案清單
-    remote_files = get_all_files()[0:5]
+    remote_files = get_all_files()
     print(f'共有 {len(remote_files)}個檔案')
 
-    pdf_doc_list = []
     for remote_file in remote_files:
-        document_name, remote_file_path, remote_file_ext = map(
-            remote_file.get, ["document_name", "remote_file_path", "remote_file_ext"]
+        file_name, remote_file_path, remote_file_ext = map(
+            remote_file.get, ["file_name", "remote_file_path", "remote_file_ext"]
         )
         local_file_path = download_file_via_ssh(remote_file_path) # 存到本地
         # local_file_path = /home/biguser/codeFactory/llm_knowledge_management/downloads/Wi-Fi 6(802.11ax)解析3：上行随机接入（TF，TF-R）.pdf
@@ -184,20 +146,39 @@ def main():
             # 將 docx 轉換成 pdf
             local_file_path = convert_docx_to_pdf(local_file_path, LOCAL_DOWNLOAD_DIR)
 
+
         # 如果是純文字檔案，如 txt
         if local_file_path.endswith(".txt"):
             loader = get_loader(local_file_path)
-            document_text = loader.load()
+            original_full_text = loader.load()
             print(f'{local_file_path}準備text_split並存入vector store')
+            continue
+            # original_chunks = ragger.text_splitter.create_documents([original_full_text])
+            # text_summaries = summarize_chain.batch(original_chunks, {"max_concurrency": 5})
+            
+
+        elif local_file_path.endswith(".pdf"):
+            print(f'開始處理 pdf 路徑: {local_file_path}')
+            raw_pdf_elements = ragger.analyze_pdf_component(local_file_path)
+
+            # 1. 存 images 資料夾的圖片到 vector store
+            ragger.embed_pdf_images_and_store(remote_file)
+            # 刪除 images 資料夾下的圖片
+            shutil.rmtree("./images")
+            # 2. 處理文字
+            ragger.embed_table_text_and_store(remote_file, raw_pdf_elements)
+
         else:
-            print(f'{local_file_path}開始處理 PDF')
+            print(f'跳過 {local_file_path}')
+            continue
 
 
-
+        print(f'完成 {file_name} 的處理')
         print('----------------')
-    # print(len(pdf_doc_list))
-    # print((pdf_doc_list))
 
 
 if __name__ == "__main__":
-    main()
+    embedder_config = EmbeddingConfiguration() # Initiate Embedding 專用的 Config 物件
+    ragger = RAGGER(embedder_config) # 啟用 RAGGER(pgvector + embedder) 物件
+    embedding_and_storing_main(ragger)
+    

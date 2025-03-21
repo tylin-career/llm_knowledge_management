@@ -1,20 +1,21 @@
-# Image summarizer
-
 import base64
-import os
-
 from langchain_openai import ChatOpenAI
 from langchain.schema.messages import HumanMessage
+from typing import Any
+from pydantic import BaseModel
+
+
 
 class ImageSummarizer:
 
     def __init__(self, image_path) -> None:
         self.image_path = image_path
         self.prompt = """
-You are an assistant tasked with summarizing images for retrieval.
-These summaries will be embedded and used to retrieve the raw image.
-Give a concise summary of the image that is well optimized for retrieval.
-"""
+            You are an assistant tasked with summarizing images for retrieval.
+            These summaries will be embedded and used to retrieve the raw image.
+            Give a concise summary of the image that is well optimized for retrieval.
+            請用繁體中文
+        """
 
     def base64_encode_image(self):
         with open(self.image_path, "rb") as image_file:
@@ -42,3 +43,8 @@ Give a concise summary of the image that is well optimized for retrieval.
             ]
         )
         return base64_image_data, response.content
+    
+
+class Element(BaseModel):
+    type: str
+    text: Any
