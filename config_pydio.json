@@ -1,0 +1,8 @@
+{
+    "SSH_HOST": "10.96.196.74",
+    "SSH_PORT": 22,
+    "SSH_USER": "biguser",
+    "SSH_PASSWORD": "npspo",
+    "BASE_PATH": "/mnt/nfs_share/pydio/jacky/05_Technical_Knowledge/00_Internal_Training/03_WiFi_Professsional"
+  }
+  

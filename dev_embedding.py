@@ -5,24 +5,25 @@ import shutil
 import paramiko
 import pytz
 from datetime import datetime
-
-# Langchain 相關引入
 from langchain_community.document_loaders import TextLoader
-
 from src.ragger import RAGGER
 from config import EmbeddingConfiguration
-
+from timer import timing_decorator
+from tqdm import tqdm
+import json
 
 
 # 設定時區
 tz = pytz.timezone("Asia/Taipei")
 
 # SSH 連線資訊
-SSH_HOST = "10.96.196.74"
-SSH_PORT = 22
-SSH_USER = "biguser"
-SSH_PASSWORD = "npspo"
-BASE_PATH = "/mnt/nfs_share/pydio/jacky/05_Technical_Knowledge/00_Internal_Training/03_WiFi_Professsional"
+with open("config_pydio.json", "r") as f:
+    config = json.load(f)
+SSH_HOST = config["SSH_HOST"]
+SSH_PORT = config["SSH_PORT"]
+SSH_USER = config["SSH_USER"]
+SSH_PASSWORD = config["SSH_PASSWORD"]
+BASE_PATH = config["BASE_PATH"]
 
 # 設定下載資料夾
 LOCAL_DOWNLOAD_DIR = os.path.abspath("./downloads")
@@ -40,7 +41,7 @@ def get_all_files() -> list[dict]:
     """透過 SSH 取得所有符合指定格式的檔案（排除 test 相關資料夾）"""
     client = ssh_connect()
     cmd = f"find {BASE_PATH} -type f | grep -v test"
-    stdin, stdout, stderr = client.exec_command(cmd)
+    _, stdout, _ = client.exec_command(cmd)
     
     files = stdout.read().decode().splitlines()
     client.close()
@@ -127,14 +128,13 @@ def get_loader(local_file_path):
 
 
 
-from timer import timing_decorator
 @timing_decorator
 def embedding_and_storing_main(ragger: RAGGER):
-    # 取得遠端檔案清單
+    # 取得遠端檔案 清單
     remote_files = get_all_files()
     print(f'共有 {len(remote_files)}個檔案')
 
-    for remote_file in remote_files:
+    for remote_file in tqdm(remote_files, desc="處理遠端檔案中"):
         file_name, remote_file_path, remote_file_ext = map(
             remote_file.get, ["file_name", "remote_file_path", "remote_file_ext"]
         )

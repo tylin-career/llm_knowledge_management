@@ -23,4 +23,6 @@ torch
 psutil
 comtypes
 llama_index
-langchain_experimental 
+langchain_experimental
+tqdm
+langchain_cohere
