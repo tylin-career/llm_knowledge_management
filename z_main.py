@@ -2,7 +2,7 @@ from langchain_openai import ChatOpenAI
 from langchain_ollama import OllamaEmbeddings
 from langchain_openai import OpenAIEmbeddings
 from config import LLM_PROVIDER, OPENAI_API_KEY, POSTGRES_URL
-from postgresql import get_pg_engine
+from z_postgresql import get_pg_engine
 import psycopg2
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser

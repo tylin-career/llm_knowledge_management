@@ -4,6 +4,7 @@ venv/
 downloads/
 images/
 data/
+apps/
 
 # Python cache files
 __pycache__/

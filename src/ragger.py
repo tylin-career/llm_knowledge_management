@@ -158,10 +158,10 @@ class RAGGER:
             separators=[
                 "\n\n",
                 "\n",
-                " ",
+                # " ",
                 ".",
                 "。",
-                ",",
+                # ",",
                 "!",
                 "！",
                 "\u200b",  # Zero-width space

@@ -8,7 +8,7 @@ from datetime import datetime
 from langchain_community.document_loaders import TextLoader
 from src.ragger import RAGGER
 from config import EmbeddingConfiguration
-from timer import timing_decorator
+from src.timer import timing_decorator
 from tqdm import tqdm
 import json
 

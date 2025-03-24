@@ -10,7 +10,7 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 POSTGRES_URL = os.getenv('POSTGRES_URL')
 EMBEDDING_PROVIDER = os.getenv('EMBEDDING_PROVIDER')
 
-class Configuration:
+class LLMConfiguration:
     def __init__(self, model, openai_api_key, openai_api_base, temperature):
         self.model = model
         self.openai_api_key = openai_api_key
