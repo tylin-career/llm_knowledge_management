@@ -26,3 +26,4 @@ llama_index
 langchain_experimental
 tqdm
 langchain_cohere
+pyodbc
